@@ -1,0 +1,1222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced Family Meal Planner</title>
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: linear-gradient(135deg, #fce4f3 0%, #e8d8ff 100%);
+            min-height: 100vh;
+        }
+        
+        /* Custom grid layout */
+        .meal-planner-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 1rem;
+            height: calc(100vh - 180px); /* Account for header */
+        }
+        
+        @media (min-width: 1024px) {
+            .meal-planner-grid {
+                grid-template-columns: 300px 1fr 300px;
+            }
+        }
+        
+        @media (min-width: 1280px) {
+            .meal-planner-grid {
+                grid-template-columns: 320px 1fr 320px;
+            }
+        }
+        
+        /* Scrollable panels */
+        .scrollable-panel {
+            height: 100%;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: #d8b5ff;
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: #c19ff5;
+        }
+        
+        /* Smooth transitions */
+        * {
+            transition: all 0.2s ease-out;
+        }
+        
+        .drag-over {
+            background: #f0e6ff !important;
+            border-color: #9b72cf !important;
+            transform: scale(1.02);
+            box-shadow: 0 4px 12px rgba(155, 114, 207, 0.2);
+        }
+        
+        .dragging {
+            opacity: 0.5;
+            cursor: grabbing !important;
+            transform: rotate(2deg);
+        }
+        
+        /* Enhance drop zones visibility during drag */
+        body.dragging-active .border-dashed {
+            border-color: #d8b5ff;
+            background: #faf7ff;
+        }
+        
+        /* Mobile responsive adjustments */
+        @media (max-width: 1023px) {
+            .meal-planner-grid {
+                grid-template-columns: 1fr;
+                height: auto;
+            }
+            
+            .scrollable-panel {
+                height: auto;
+                max-height: 60vh;
+            }
+            
+            .mobile-panel-spacing {
+                margin-bottom: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // Meal data structure
+        const initialMealData = {
+            breakfast: [
+                { id: 'b1', name: 'Pancakes', ingredients: [
+                    { item: 'Pancake Mix', amount: 2, unit: 'cups', category: 'Pantry' },
+                    { item: 'Milk', amount: 1.5, unit: 'cups', category: 'Dairy' },
+                    { item: 'Eggs', amount: 2, unit: '', category: 'Dairy' },
+                    { item: 'Butter', amount: 2, unit: 'tbsp', category: 'Dairy' },
+                    { item: 'Syrup', amount: 0.5, unit: 'cup', category: 'Pantry' }
+                ]},
+                { id: 'b2', name: 'Scrambled Eggs & Toast', ingredients: [
+                    { item: 'Eggs', amount: 6, unit: '', category: 'Dairy' },
+                    { item: 'Bread', amount: 6, unit: 'slices', category: 'Bakery' },
+                    { item: 'Butter', amount: 2, unit: 'tbsp', category: 'Dairy' },
+                    { item: 'Milk', amount: 0.25, unit: 'cup', category: 'Dairy' },
+                    { item: 'Salt', amount: 1, unit: 'tsp', category: 'Pantry' },
+                    { item: 'Pepper', amount: 0.5, unit: 'tsp', category: 'Pantry' }
+                ]},
+                { id: 'b3', name: 'Cereal & Milk', ingredients: [
+                    { item: 'Cereal', amount: 4, unit: 'cups', category: 'Pantry' },
+                    { item: 'Milk', amount: 2, unit: 'cups', category: 'Dairy' }
+                ]},
+                { id: 'b4', name: 'Oatmeal', ingredients: [
+                    { item: 'Oats', amount: 2, unit: 'cups', category: 'Pantry' },
+                    { item: 'Milk', amount: 2, unit: 'cups', category: 'Dairy' },
+                    { item: 'Brown Sugar', amount: 4, unit: 'tbsp', category: 'Pantry' },
+                    { item: 'Cinnamon', amount: 1, unit: 'tsp', category: 'Pantry' }
+                ]},
+                { id: 'b5', name: 'French Toast', ingredients: [
+                    { item: 'Bread', amount: 8, unit: 'slices', category: 'Bakery' },
+                    { item: 'Eggs', amount: 4, unit: '', category: 'Dairy' },
+                    { item: 'Milk', amount: 0.5, unit: 'cup', category: 'Dairy' },
+                    { item: 'Cinnamon', amount: 1, unit: 'tsp', category: 'Pantry' },
+                    { item: 'Vanilla', amount: 1, unit: 'tsp', category: 'Pantry' }
+                ]}
+            ],
+            lunch: [
+                { id: 'l1', name: 'BLT Sandwiches', ingredients: [
+                    { item: 'Bacon', amount: 1, unit: 'lb', category: 'Meat' },
+                    { item: 'Lettuce', amount: 1, unit: 'head', category: 'Produce' },
+                    { item: 'Tomato', amount: 2, unit: '', category: 'Produce' },
+                    { item: 'Bread', amount: 8, unit: 'slices', category: 'Bakery' },
+                    { item: 'Mayo', amount: 0.5, unit: 'cup', category: 'Condiments' }
+                ]},
+                { id: 'l2', name: 'Chicken Philly Sandwich', ingredients: [
+                    { item: 'Chicken Breast', amount: 1.5, unit: 'lbs', category: 'Meat' },
+                    { item: 'Hoagie Rolls', amount: 4, unit: '', category: 'Bakery' },
+                    { item: 'Provolone Cheese', amount: 8, unit: 'slices', category: 'Dairy' },
+                    { item: 'Bell Peppers', amount: 2, unit: '', category: 'Produce' },
+                    { item: 'Onion', amount: 1, unit: '', category: 'Produce' }
+                ]},
+                { id: 'l3', name: 'Quesadillas', ingredients: [
+                    { item: 'Tortillas', amount: 8, unit: '', category: 'Bakery' },
+                    { item: 'Chicken', amount: 1, unit: 'lb', category: 'Meat' },
+                    { item: 'Cheese', amount: 2, unit: 'cups', category: 'Dairy' },
+                    { item: 'Salsa', amount: 1, unit: 'jar', category: 'Condiments' }
+                ]},
+                { id: 'l4', name: 'Soup & Crackers', ingredients: [
+                    { item: 'Canned Soup', amount: 4, unit: 'cans', category: 'Pantry' },
+                    { item: 'Crackers', amount: 1, unit: 'box', category: 'Pantry' }
+                ]},
+                { id: 'l5', name: 'Leftovers', ingredients: []}
+            ],
+            dinner: {
+                burgers: [
+                    { id: 'd1', name: 'Classic Burgers', ingredients: [
+                        { item: 'Ground Beef', amount: 2, unit: 'lbs', category: 'Meat' },
+                        { item: 'Burger Buns', amount: 8, unit: '', category: 'Bakery' },
+                        { item: 'Colby Jack Cheese', amount: 8, unit: 'slices', category: 'Dairy' },
+                        { item: 'Tomato', amount: 2, unit: '', category: 'Produce' },
+                        { item: 'Lettuce', amount: 1, unit: 'head', category: 'Produce' }
+                    ], prep: ['Form burger patties', 'Slice tomatoes', 'Wash lettuce']},
+                    { id: 'd2', name: 'Bacon Burgers', ingredients: [
+                        { item: 'Ground Beef', amount: 2, unit: 'lbs', category: 'Meat' },
+                        { item: 'Burger Buns', amount: 8, unit: '', category: 'Bakery' },
+                        { item: 'Bacon', amount: 0.5, unit: 'lb', category: 'Meat' },
+                        { item: 'Colby Jack Cheese', amount: 8, unit: 'slices', category: 'Dairy' },
+                        { item: 'Tomato', amount: 2, unit: '', category: 'Produce' },
+                        { item: 'Lettuce', amount: 1, unit: 'head', category: 'Produce' }
+                    ], prep: ['Cook bacon ahead', 'Form burger patties']},
+                    { id: 'd3', name: 'Sliders', ingredients: [
+                        { item: 'Ground Beef', amount: 2, unit: 'lbs', category: 'Meat' },
+                        { item: 'Slider Buns', amount: 12, unit: '', category: 'Bakery' },
+                        { item: 'Colby Jack Cheese', amount: 6, unit: 'slices', category: 'Dairy' },
+                        { item: 'Pickles', amount: 1, unit: 'jar', category: 'Condiments' }
+                    ], prep: ['Form small patties']},
+                    { id: 'd4', name: 'Maidrites', ingredients: [
+                        { item: 'Ground Beef', amount: 2, unit: 'lbs', category: 'Meat' },
+                        { item: 'Burger Buns', amount: 8, unit: '', category: 'Bakery' },
+                        { item: 'Onion', amount: 1, unit: '', category: 'Produce' },
+                        { item: 'Mustard', amount: 1, unit: 'bottle', category: 'Condiments' }
+                    ], prep: ['Dice onion']}
+                ],
+                chicken: [
+                    { id: 'd5', name: 'Chicken Nuggets', ingredients: [
+                        { item: 'Chicken Breast', amount: 2, unit: 'lbs', category: 'Meat' },
+                        { item: 'Breadcrumbs', amount: 2, unit: 'cups', category: 'Pantry' },
+                        { item: 'Eggs', amount: 3, unit: '', category: 'Dairy' }
+                    ], prep: ['Cut chicken into nugget pieces', 'Set up breading station']},
+                    { id: 'd6', name: 'Grandmas Chicken', ingredients: [
+                        { item: 'Chicken Breast', amount: 2, unit: 'lbs', category: 'Meat' },
+                        { item: 'Cornflakes', amount: 3, unit: 'cups', category: 'Pantry' },
+                        { item: 'Parmesan Cheese', amount: 0.5, unit: 'cup', category: 'Dairy' },
+                        { item: 'Butter', amount: 0.25, unit: 'cup', category: 'Dairy' }
+                    ], prep: ['Crush cornflakes', 'Melt butter']},
+                    { id: 'd7', name: 'Buffalo Chicken Potato Casserole', ingredients: [
+                        { item: 'Chicken', amount: 2, unit: 'lbs', category: 'Meat' },
+                        { item: 'Potatoes', amount: 5, unit: 'lbs', category: 'Produce' },
+                        { item: 'Buffalo Sauce', amount: 1, unit: 'cup', category: 'Condiments' },
+                        { item: 'Cheese', amount: 0.5, unit: 'lb', category: 'Dairy' }
+                    ], prep: ['Cook and shred chicken', 'Slice potatoes']},
+                    { id: 'd8', name: 'Cheesy Chicken & Rice', ingredients: [
+                        { item: 'Chicken', amount: 2, unit: 'lbs', category: 'Meat' },
+                        { item: 'Rice', amount: 2, unit: 'cups', category: 'Pantry' },
+                        { item: 'Cheese', amount: 0.5, unit: 'lb', category: 'Dairy' },
+                        { item: 'Cream of Chicken Soup', amount: 2, unit: 'cans', category: 'Pantry' }
+                    ], prep: ['Cook rice', 'Cube chicken']}
+                ],
+                tacos: [
+                    { id: 'd9', name: 'Classic Tacos', ingredients: [
+                        { item: 'Ground Beef', amount: 2, unit: 'lbs', category: 'Meat' },
+                        { item: 'Taco Shells', amount: 12, unit: '', category: 'Bakery' },
+                        { item: 'Sour Cream', amount: 1, unit: 'container', category: 'Dairy' },
+                        { item: 'Colby Jack Cheese', amount: 0.5, unit: 'lb', category: 'Dairy' },
+                        { item: 'Lettuce', amount: 1, unit: 'head', category: 'Produce' },
+                        { item: 'Tomato', amount: 2, unit: '', category: 'Produce' },
+                        { item: 'Black Olives', amount: 1, unit: 'can', category: 'Pantry' }
+                    ], prep: ['Brown ground beef', 'Shred lettuce', 'Dice tomatoes', 'Grate cheese']},
+                    { id: 'd10', name: 'Grilled Stuffed Tacos', ingredients: [
+                        { item: 'Ground Beef', amount: 2, unit: 'lbs', category: 'Meat' },
+                        { item: 'Tortillas', amount: 8, unit: '', category: 'Bakery' },
+                        { item: 'Crispy Shells', amount: 8, unit: '', category: 'Bakery' },
+                        { item: 'Cheese', amount: 0.5, unit: 'lb', category: 'Dairy' },
+                        { item: 'Sour Cream', amount: 1, unit: 'container', category: 'Dairy' }
+                    ], prep: ['Cook ground beef', 'Prepare double shells']},
+                    { id: 'd11', name: 'Nachos', ingredients: [
+                        { item: 'Tortilla Chips', amount: 1, unit: 'bag', category: 'Pantry' },
+                        { item: 'Chicken', amount: 1, unit: 'lb', category: 'Meat' },
+                        { item: 'Cheese', amount: 0.5, unit: 'lb', category: 'Dairy' },
+                        { item: 'Sour Cream', amount: 1, unit: 'container', category: 'Dairy' },
+                        { item: 'Salsa', amount: 1, unit: 'jar', category: 'Condiments' }
+                    ], prep: ['Cook and shred chicken', 'Grate cheese']}
+                ],
+                steak: [
+                    { id: 'd12', name: 'Steak and Potatoes', ingredients: [
+                        { item: 'Sirloin Steak', amount: 2, unit: 'lbs', category: 'Meat' },
+                        { item: 'Potatoes', amount: 5, unit: 'lbs', category: 'Produce' },
+                        { item: 'Butter', amount: 0.25, unit: 'cup', category: 'Dairy' },
+                        { item: 'Seasonings', amount: 1, unit: 'set', category: 'Pantry' }
+                    ], prep: ['Season steaks', 'Cut potatoes']},
+                    { id: 'd13', name: 'Steak Rice & Gravy', ingredients: [
+                        { item: 'Steak', amount: 1.5, unit: 'lbs', category: 'Meat' },
+                        { item: 'Rice', amount: 2, unit: 'cups', category: 'Pantry' },
+                        { item: 'Gravy Mix', amount: 2, unit: 'packets', category: 'Pantry' },
+                        { item: 'Mushrooms', amount: 8, unit: 'oz', category: 'Produce' }
+                    ], prep: ['Slice steak', 'Cook rice']},
+                    { id: 'd14', name: 'Italian Beef Sandwiches', ingredients: [
+                        { item: 'Lean Roast', amount: 2, unit: 'lbs', category: 'Meat' },
+                        { item: 'Hoagie Buns', amount: 8, unit: '', category: 'Bakery' },
+                        { item: 'Provolone Cheese', amount: 8, unit: 'slices', category: 'Dairy' },
+                        { item: 'Italian Seasoning', amount: 2, unit: 'tbsp', category: 'Pantry' },
+                        { item: 'Beef Broth', amount: 2, unit: 'cups', category: 'Pantry' }
+                    ], prep: ['Season roast', 'Prep slow cooker']},
+                    { id: 'd15', name: 'Hamburger Helper', ingredients: [
+                        { item: 'Ground Beef', amount: 1, unit: 'lb', category: 'Meat' },
+                        { item: 'Hamburger Helper Box', amount: 1, unit: 'box', category: 'Pantry' },
+                        { item: 'Milk', amount: 1, unit: 'cup', category: 'Dairy' }
+                    ], prep: ['Brown ground beef']}
+                ],
+                pizza: [
+                    { id: 'd16', name: 'Frozen Pizza', ingredients: [
+                        { item: 'Frozen Pizza', amount: 2, unit: '', category: 'Frozen' }
+                    ], prep: ['Preheat oven']},
+                    { id: 'd17', name: 'Takeout Pizza', ingredients: [], prep: ['Order pizza']},
+                    { id: 'd18', name: 'Homemade Pizza', ingredients: [
+                        { item: 'Flour', amount: 3, unit: 'cups', category: 'Pantry' },
+                        { item: 'Cheese', amount: 2, unit: 'lbs', category: 'Dairy' },
+                        { item: 'Tomato Sauce', amount: 1, unit: 'jar', category: 'Pantry' },
+                        { item: 'Pepperoni', amount: 1, unit: 'package', category: 'Meat' },
+                        { item: 'Yeast', amount: 1, unit: 'packet', category: 'Pantry' }
+                    ], prep: ['Make dough', 'Let dough rise', 'Prep toppings']}
+                ],
+                special: [
+                    { id: 'd19', name: 'Fried Chicken Sandwiches', ingredients: [
+                        { item: 'Chicken Breast', amount: 2, unit: 'lbs', category: 'Meat' },
+                        { item: 'Burger Buns', amount: 8, unit: '', category: 'Bakery' },
+                        { item: 'Swiss Cheese', amount: 8, unit: 'slices', category: 'Dairy' },
+                        { item: 'Flour', amount: 2, unit: 'cups', category: 'Pantry' },
+                        { item: 'Buttermilk', amount: 2, unit: 'cups', category: 'Dairy' }
+                    ], prep: ['Marinate chicken in buttermilk', 'Set up breading station']},
+                    { id: 'd20', name: 'Chicken Alfredo', ingredients: [
+                        { item: 'Chicken', amount: 1, unit: 'lb', category: 'Meat' },
+                        { item: 'Pasta', amount: 1, unit: 'lb', category: 'Pantry' },
+                        { item: 'Parmesan Cheese', amount: 1, unit: 'cup', category: 'Dairy' },
+                        { item: 'Heavy Cream', amount: 2, unit: 'cups', category: 'Dairy' },
+                        { item: 'Butter', amount: 0.25, unit: 'cup', category: 'Dairy' }
+                    ], prep: ['Cook pasta', 'Grate cheese', 'Cook and slice chicken']},
+                    { id: 'd21', name: 'Chicken Bacon Ranch Subs', ingredients: [
+                        { item: 'Sub Rolls', amount: 8, unit: '', category: 'Bakery' },
+                        { item: 'Chicken', amount: 2, unit: 'lbs', category: 'Meat' },
+                        { item: 'Bacon', amount: 1, unit: 'lb', category: 'Meat' },
+                        { item: 'Swiss Cheese', amount: 8, unit: 'slices', category: 'Dairy' },
+                        { item: 'Ranch Dressing', amount: 1, unit: 'bottle', category: 'Condiments' }
+                    ], prep: ['Cook bacon', 'Cook and slice chicken']}
+                ]
+            }
+        };
+
+        // Helper components
+        const ChevronDown = () => (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+        );
+
+        const ChevronRight = () => (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+        );
+
+        const PlusIcon = () => (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+        );
+
+        const EditIcon = () => (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+        );
+
+        const TrashIcon = () => (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+        );
+
+        const SaveIcon = () => (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+            </svg>
+        );
+
+        const ExportIcon = () => (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+        );
+
+        const XIcon = () => (
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        );
+
+        // Main App Component
+        const MealPlanner = () => {
+            const [meals, setMeals] = useState(initialMealData);
+            const [calendar, setCalendar] = useState({});
+            const [familySize, setFamilySize] = useState(4);
+            const [view, setView] = useState('monthly');
+            const [expandedCategories, setExpandedCategories] = useState({
+                breakfast: true,
+                lunch: true,
+                dinner: true,
+                burgers: false,
+                chicken: false,
+                tacos: false,
+                steak: false,
+                pizza: false,
+                special: false
+            });
+            const [editingMeal, setEditingMeal] = useState(null);
+            const [draggedMeal, setDraggedMeal] = useState(null);
+            const [showGroceryList, setShowGroceryList] = useState(false);
+            const [showPrepTasks, setShowPrepTasks] = useState(false);
+
+            // Storage operations (using in-memory storage instead of localStorage)
+            const [savedPlans, setSavedPlans] = useState({});
+            
+            const savePlan = (name = 'default') => {
+                const planData = {
+                    calendar,
+                    familySize,
+                    timestamp: new Date().toISOString()
+                };
+                setSavedPlans(prev => ({
+                    ...prev,
+                    [name]: planData
+                }));
+                alert('✅ Meal plan saved!');
+            };
+
+            const loadPlan = (name = 'default') => {
+                const plan = savedPlans[name];
+                if (plan) {
+                    setCalendar(plan.calendar);
+                    setFamilySize(plan.familySize);
+                    alert('✅ Meal plan loaded!');
+                } else {
+                    alert('⚠️ No saved plan found!');
+                }
+            };
+
+            const clearPlan = () => {
+                if (confirm('Clear all meals from the calendar?')) {
+                    setCalendar({});
+                }
+            };
+
+            // Auto-fill calendar with intelligent meal distribution
+            const autoFillCalendar = () => {
+                const newCalendar = {};
+                const daysInView = view === 'weekly' ? 7 : 28;
+                
+                // Track last used meals to avoid repetition
+                const lastUsed = {
+                    breakfast: null,
+                    lunch: null,
+                    dinner: null
+                };
+                
+                // Helper to get a random meal avoiding recent ones
+                const getRandomMeal = (mealArray, lastUsedMeal) => {
+                    const availableMeals = mealArray.filter(m => !lastUsedMeal || m.id !== lastUsedMeal.id);
+                    if (availableMeals.length === 0) return mealArray[Math.floor(Math.random() * mealArray.length)];
+                    return availableMeals[Math.floor(Math.random() * availableMeals.length)];
+                };
+                
+                // Helper to get dinner meals with variety
+                const getDinnerMeal = (dayOfWeek, weekNumber) => {
+                    // Define a rotation pattern for dinner categories
+                    const dinnerRotation = [
+                        'burgers', 'chicken', 'tacos', 'steak', 'special', 'pizza', 'chicken'
+                    ];
+                    
+                    // Get the category for this day
+                    const categoryIndex = (dayOfWeek + weekNumber * 7) % dinnerRotation.length;
+                    const category = dinnerRotation[categoryIndex];
+                    
+                    // Special handling for pizza (typically Friday)
+                    if (dayOfWeek === 5) { // Friday
+                        const pizzaOptions = meals.dinner.pizza;
+                        return pizzaOptions[Math.floor(Math.random() * pizzaOptions.length)];
+                    }
+                    
+                    const categoryMeals = meals.dinner[category];
+                    if (categoryMeals && categoryMeals.length > 0) {
+                        return categoryMeals[Math.floor(Math.random() * categoryMeals.length)];
+                    }
+                    
+                    // Fallback to any dinner
+                    const allDinners = Object.values(meals.dinner).flat();
+                    return allDinners[Math.floor(Math.random() * allDinners.length)];
+                };
+                
+                // Fill each day
+                for (let day = 1; day <= daysInView; day++) {
+                    const dayOfWeek = (day - 1) % 7;
+                    const weekNumber = Math.floor((day - 1) / 7);
+                    
+                    // Breakfast - vary throughout the week
+                    const breakfastMeal = getRandomMeal(meals.breakfast, lastUsed.breakfast);
+                    newCalendar[`${day}-breakfast`] = breakfastMeal;
+                    lastUsed.breakfast = breakfastMeal;
+                    
+                    // Lunch - include leftovers occasionally
+                    if (dayOfWeek === 1 || dayOfWeek === 3) { // Monday or Wednesday
+                        const leftoversMeal = meals.lunch.find(m => m.name === 'Leftovers');
+                        if (leftoversMeal) {
+                            newCalendar[`${day}-lunch`] = leftoversMeal;
+                        } else {
+                            const lunchMeal = getRandomMeal(meals.lunch, lastUsed.lunch);
+                            newCalendar[`${day}-lunch`] = lunchMeal;
+                            lastUsed.lunch = lunchMeal;
+                        }
+                    } else {
+                        const lunchMeal = getRandomMeal(meals.lunch, lastUsed.lunch);
+                        newCalendar[`${day}-lunch`] = lunchMeal;
+                        lastUsed.lunch = lunchMeal;
+                    }
+                    
+                    // Dinner - use rotation system
+                    const dinnerMeal = getDinnerMeal(dayOfWeek, weekNumber);
+                    newCalendar[`${day}-dinner`] = dinnerMeal;
+                }
+                
+                setCalendar(newCalendar);
+            };
+
+            // Toggle category expansion
+            const toggleCategory = (category) => {
+                setExpandedCategories(prev => ({
+                    ...prev,
+                    [category]: !prev[category]
+                }));
+            };
+
+            // Find first available slot
+            const findFirstAvailableSlot = (mealType) => {
+                const daysInView = view === 'weekly' ? 7 : 28;
+                for (let day = 1; day <= daysInView; day++) {
+                    const key = `${day}-${mealType}`;
+                    if (!calendar[key]) {
+                        return day;
+                    }
+                }
+                return null;
+            };
+
+            // Handle meal click (auto-place)
+            const handleMealClick = (meal, mealType) => {
+                const availableDay = findFirstAvailableSlot(mealType);
+                if (availableDay) {
+                    const key = `${availableDay}-${mealType}`;
+                    setCalendar(prev => ({
+                        ...prev,
+                        [key]: meal
+                    }));
+                } else {
+                    alert(`No available ${mealType} slots in current view!`);
+                }
+            };
+
+            // Drag and drop handlers
+            const handleDragStart = (e, meal, mealType) => {
+                setDraggedMeal({ ...meal, mealType });
+                e.dataTransfer.effectAllowed = 'copy';
+                document.body.classList.add('dragging-active');
+            };
+
+            const handleDragEnd = () => {
+                document.body.classList.remove('dragging-active');
+            };
+
+            const handleDragOver = (e) => {
+                e.preventDefault();
+                e.currentTarget.classList.add('drag-over');
+            };
+
+            const handleDragLeave = (e) => {
+                e.currentTarget.classList.remove('drag-over');
+            };
+
+            const handleDrop = (e, day, mealType) => {
+                e.preventDefault();
+                e.currentTarget.classList.remove('drag-over');
+                
+                if (draggedMeal) {
+                    const key = `${day}-${mealType}`;
+                    setCalendar(prev => ({
+                        ...prev,
+                        [key]: draggedMeal
+                    }));
+                    setDraggedMeal(null);
+                }
+                
+                document.body.classList.remove('dragging-active');
+            };
+
+            // Remove meal from calendar
+            const removeMeal = (day, mealType) => {
+                const key = `${day}-${mealType}`;
+                setCalendar(prev => {
+                    const newCalendar = { ...prev };
+                    delete newCalendar[key];
+                    return newCalendar;
+                });
+            };
+
+            // Generate grocery list
+            const generateGroceryList = () => {
+                const groceryItems = {};
+                const scaleFactor = familySize / 4;
+
+                Object.values(calendar).forEach(meal => {
+                    if (meal && meal.ingredients) {
+                        meal.ingredients.forEach(ing => {
+                            const key = `${ing.item}-${ing.category}`;
+                            if (groceryItems[key]) {
+                                groceryItems[key].amount += ing.amount * scaleFactor;
+                            } else {
+                                groceryItems[key] = {
+                                    ...ing,
+                                    amount: ing.amount * scaleFactor
+                                };
+                            }
+                        });
+                    }
+                });
+
+                // Group by category
+                const categorized = {};
+                Object.values(groceryItems).forEach(item => {
+                    if (!categorized[item.category]) {
+                        categorized[item.category] = [];
+                    }
+                    categorized[item.category].push(item);
+                });
+
+                return categorized;
+            };
+
+            // Export grocery list
+            const exportGroceryList = () => {
+                const groceryList = generateGroceryList();
+                let text = `Grocery List - Family of ${familySize}\n`;
+                text += `Generated: ${new Date().toLocaleDateString()}\n\n`;
+
+                Object.entries(groceryList).forEach(([category, items]) => {
+                    text += `${category}:\n`;
+                    items.forEach(item => {
+                        const amount = item.amount % 1 === 0 ? item.amount : item.amount.toFixed(1);
+                        text += `  - ${item.item}: ${amount} ${item.unit}\n`;
+                    });
+                    text += '\n';
+                });
+
+                const blob = new Blob([text], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `grocery-list-${new Date().toISOString().split('T')[0]}.txt`;
+                a.click();
+                URL.revokeObjectURL(url);
+            };
+
+            // Get prep tasks
+            const getPrepTasks = () => {
+                const tasks = [];
+                Object.entries(calendar).forEach(([key, meal]) => {
+                    if (meal && meal.prep) {
+                        const [day, mealType] = key.split('-');
+                        meal.prep.forEach(task => {
+                            tasks.push({
+                                day: parseInt(day),
+                                mealType,
+                                meal: meal.name,
+                                task
+                            });
+                        });
+                    }
+                });
+                return tasks.sort((a, b) => a.day - b.day);
+            };
+
+            // Meal component
+            const MealItem = ({ meal, mealType, onEdit }) => (
+                <div
+                    draggable
+                    onDragStart={(e) => {
+                        handleDragStart(e, meal, mealType);
+                        e.currentTarget.classList.add('dragging');
+                    }}
+                    onDragEnd={(e) => {
+                        e.currentTarget.classList.remove('dragging');
+                        handleDragEnd();
+                    }}
+                    onClick={() => handleMealClick(meal, mealType)}
+                    className="bg-white border-2 border-pink-200 rounded-lg p-2 mb-2 cursor-grab hover:cursor-grab hover:border-purple-400 hover:shadow-md group"
+                    title="Click to add to calendar or drag to specific day"
+                >
+                    <div className="flex justify-between items-center">
+                        <div>
+                            <div className="font-medium text-sm text-gray-800">{meal.name}</div>
+                            <div className="text-xs text-gray-500">{meal.ingredients?.length || 0} ingredients</div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                            <span className="text-xs text-gray-400 opacity-0 group-hover:opacity-100">
+                                📌
+                            </span>
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onEdit(meal, mealType);
+                                }}
+                                className="opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-100 rounded"
+                            >
+                                <EditIcon />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+
+            // Calendar slot component
+            const CalendarSlot = ({ day, mealType, meal }) => (
+                <div
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, day, mealType)}
+                    className="border-2 border-dashed border-gray-200 rounded p-1 min-h-[60px] bg-white hover:border-purple-300"
+                >
+                    <div className="text-xs text-gray-400 mb-1">{mealType}</div>
+                    {meal && (
+                        <div className="bg-gradient-to-r from-pink-100 to-purple-100 rounded p-1 relative group">
+                            <div className="text-xs font-medium pr-4">{meal.name}</div>
+                            <button
+                                onClick={() => removeMeal(day, mealType)}
+                                className="absolute top-0 right-0 p-1 opacity-0 group-hover:opacity-100 bg-red-500 text-white rounded-full"
+                            >
+                                <XIcon />
+                            </button>
+                        </div>
+                    )}
+                </div>
+            );
+
+            // Edit meal modal
+            const EditMealModal = ({ meal, mealType, onSave, onClose }) => {
+                const [editedMeal, setEditedMeal] = useState({ ...meal });
+
+                const updateIngredient = (index, field, value) => {
+                    const newIngredients = [...editedMeal.ingredients];
+                    newIngredients[index] = { ...newIngredients[index], [field]: value };
+                    setEditedMeal({ ...editedMeal, ingredients: newIngredients });
+                };
+
+                const addIngredient = () => {
+                    setEditedMeal({
+                        ...editedMeal,
+                        ingredients: [...editedMeal.ingredients, { item: '', amount: 1, unit: '', category: 'Pantry' }]
+                    });
+                };
+
+                const removeIngredient = (index) => {
+                    setEditedMeal({
+                        ...editedMeal,
+                        ingredients: editedMeal.ingredients.filter((_, i) => i !== index)
+                    });
+                };
+
+                return (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                        <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                            <div className="p-6">
+                                <div className="flex justify-between items-center mb-6">
+                                    <h2 className="text-2xl font-bold text-gray-800">Edit Meal</h2>
+                                    <button
+                                        onClick={onClose}
+                                        className="p-2 hover:bg-gray-100 rounded-full"
+                                    >
+                                        <XIcon />
+                                    </button>
+                                </div>
+
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Meal Name
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={editedMeal.name}
+                                            onChange={(e) => setEditedMeal({ ...editedMeal, name: e.target.value })}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <div className="flex justify-between items-center mb-2">
+                                            <label className="block text-sm font-medium text-gray-700">
+                                                Ingredients
+                                            </label>
+                                            <button
+                                                onClick={addIngredient}
+                                                className="flex items-center gap-1 px-3 py-1 bg-purple-500 text-white rounded-lg hover:bg-purple-600"
+                                            >
+                                                <PlusIcon />
+                                                Add
+                                            </button>
+                                        </div>
+                                        
+                                        <div className="space-y-2">
+                                            {editedMeal.ingredients.map((ing, index) => (
+                                                <div key={index} className="flex gap-2 items-center">
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Item"
+                                                        value={ing.item}
+                                                        onChange={(e) => updateIngredient(index, 'item', e.target.value)}
+                                                        className="flex-1 px-2 py-1 border border-gray-300 rounded"
+                                                    />
+                                                    <input
+                                                        type="number"
+                                                        placeholder="Amount"
+                                                        value={ing.amount}
+                                                        onChange={(e) => updateIngredient(index, 'amount', parseFloat(e.target.value) || 0)}
+                                                        className="w-20 px-2 py-1 border border-gray-300 rounded"
+                                                    />
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Unit"
+                                                        value={ing.unit}
+                                                        onChange={(e) => updateIngredient(index, 'unit', e.target.value)}
+                                                        className="w-20 px-2 py-1 border border-gray-300 rounded"
+                                                    />
+                                                    <select
+                                                        value={ing.category}
+                                                        onChange={(e) => updateIngredient(index, 'category', e.target.value)}
+                                                        className="px-2 py-1 border border-gray-300 rounded"
+                                                    >
+                                                        <option value="Produce">Produce</option>
+                                                        <option value="Meat">Meat</option>
+                                                        <option value="Dairy">Dairy</option>
+                                                        <option value="Pantry">Pantry</option>
+                                                        <option value="Bakery">Bakery</option>
+                                                        <option value="Frozen">Frozen</option>
+                                                        <option value="Condiments">Condiments</option>
+                                                    </select>
+                                                    <button
+                                                        onClick={() => removeIngredient(index)}
+                                                        className="p-1 text-red-600 hover:bg-red-100 rounded"
+                                                    >
+                                                        <TrashIcon />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div className="flex justify-end gap-2 mt-6">
+                                        <button
+                                            onClick={onClose}
+                                            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={() => onSave(editedMeal)}
+                                            className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600"
+                                        >
+                                            Save Changes
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            // Update meal in the meals state
+            const updateMeal = (updatedMeal, mealType, subcategory = null) => {
+                setMeals(prev => {
+                    const newMeals = { ...prev };
+                    
+                    if (mealType === 'dinner' && subcategory) {
+                        newMeals.dinner[subcategory] = newMeals.dinner[subcategory].map(m =>
+                            m.id === updatedMeal.id ? updatedMeal : m
+                        );
+                    } else {
+                        newMeals[mealType] = newMeals[mealType].map(m =>
+                            m.id === updatedMeal.id ? updatedMeal : m
+                        );
+                    }
+                    
+                    // Update in calendar too
+                    const newCalendar = { ...calendar };
+                    Object.entries(newCalendar).forEach(([key, meal]) => {
+                        if (meal && meal.id === updatedMeal.id) {
+                            newCalendar[key] = updatedMeal;
+                        }
+                    });
+                    setCalendar(newCalendar);
+                    
+                    return newMeals;
+                });
+                setEditingMeal(null);
+            };
+
+            return (
+                <div className="min-h-screen p-4">
+                    <div className="max-w-7xl mx-auto">
+                        {/* Header */}
+                        <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
+                            <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+                                <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                                    <span>👨‍👩‍👧‍👦</span>
+                                    Family Meal Planner
+                                </h1>
+                                
+                                <div className="flex items-center gap-4">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm font-medium">👥 Family Size:</span>
+                                        <select
+                                            value={familySize}
+                                            onChange={(e) => setFamilySize(parseInt(e.target.value))}
+                                            className="px-3 py-1 border border-gray-300 rounded-lg"
+                                        >
+                                            {[...Array(10)].map((_, i) => (
+                                                <option key={i} value={i + 1}>{i + 1}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => setView('weekly')}
+                                            className={`px-4 py-2 rounded-lg font-medium ${
+                                                view === 'weekly'
+                                                    ? 'bg-purple-500 text-white'
+                                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                            }`}
+                                        >
+                                            Week View
+                                        </button>
+                                        <button
+                                            onClick={() => setView('monthly')}
+                                            className={`px-4 py-2 rounded-lg font-medium ${
+                                                view === 'monthly'
+                                                    ? 'bg-purple-500 text-white'
+                                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                            }`}
+                                        >
+                                            Month View
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div className="flex flex-wrap gap-2 mt-4">
+                                <button
+                                    onClick={() => savePlan()}
+                                    className="flex items-center gap-1 px-3 py-1 bg-green-500 text-white rounded-lg hover:bg-green-600"
+                                >
+                                    <SaveIcon />
+                                    Save Plan
+                                </button>
+                                <button
+                                    onClick={() => loadPlan()}
+                                    className="px-3 py-1 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+                                >
+                                    Load Plan
+                                </button>
+                                <button
+                                    onClick={autoFillCalendar}
+                                    className="flex items-center gap-1 px-3 py-1 bg-purple-500 text-white rounded-lg hover:bg-purple-600"
+                                >
+                                    ✨ Auto-Fill
+                                </button>
+                                <button
+                                    onClick={clearPlan}
+                                    className="px-3 py-1 bg-red-500 text-white rounded-lg hover:bg-red-600"
+                                >
+                                    Clear All
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Main Content Grid */}
+                        <div className="meal-planner-grid">
+                            {/* Meal Bank */}
+                            <div className="bg-white rounded-xl shadow-sm mobile-panel-spacing">
+                                <div className="p-4 border-b border-gray-200">
+                                    <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                                        <span>🍳</span>
+                                        Meal Bank
+                                    </h2>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        Click to quick-add or drag to specific day
+                                    </p>
+                                </div>
+                                
+                                <div className="scrollable-panel p-4">
+                                    {/* Breakfast */}
+                                    <div className="mb-4">
+                                        <button
+                                            onClick={() => toggleCategory('breakfast')}
+                                            className="w-full flex items-center justify-between p-2 bg-gradient-to-r from-yellow-100 to-orange-100 rounded-lg hover:from-yellow-200 hover:to-orange-200"
+                                        >
+                                            <span className="font-medium flex items-center gap-2">
+                                                <span>🌅</span>
+                                                Breakfast ({meals.breakfast.length})
+                                            </span>
+                                            {expandedCategories.breakfast ? <ChevronDown /> : <ChevronRight />}
+                                        </button>
+                                        
+                                        {expandedCategories.breakfast && (
+                                            <div className="mt-2">
+                                                {meals.breakfast.map(meal => (
+                                                    <MealItem
+                                                        key={meal.id}
+                                                        meal={meal}
+                                                        mealType="breakfast"
+                                                        onEdit={(meal) => setEditingMeal({ meal, mealType: 'breakfast' })}
+                                                    />
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Lunch */}
+                                    <div className="mb-4">
+                                        <button
+                                            onClick={() => toggleCategory('lunch')}
+                                            className="w-full flex items-center justify-between p-2 bg-gradient-to-r from-blue-100 to-cyan-100 rounded-lg hover:from-blue-200 hover:to-cyan-200"
+                                        >
+                                            <span className="font-medium flex items-center gap-2">
+                                                <span>☀️</span>
+                                                Lunch ({meals.lunch.length})
+                                            </span>
+                                            {expandedCategories.lunch ? <ChevronDown /> : <ChevronRight />}
+                                        </button>
+                                        
+                                        {expandedCategories.lunch && (
+                                            <div className="mt-2">
+                                                {meals.lunch.map(meal => (
+                                                    <MealItem
+                                                        key={meal.id}
+                                                        meal={meal}
+                                                        mealType="lunch"
+                                                        onEdit={(meal) => setEditingMeal({ meal, mealType: 'lunch' })}
+                                                    />
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Dinner */}
+                                    <div className="mb-4">
+                                        <button
+                                            onClick={() => toggleCategory('dinner')}
+                                            className="w-full flex items-center justify-between p-2 bg-gradient-to-r from-purple-100 to-pink-100 rounded-lg hover:from-purple-200 hover:to-pink-200"
+                                        >
+                                            <span className="font-medium flex items-center gap-2">
+                                                <span>🌙</span>
+                                                Dinner
+                                            </span>
+                                            {expandedCategories.dinner ? <ChevronDown /> : <ChevronRight />}
+                                        </button>
+                                        
+                                        {expandedCategories.dinner && (
+                                            <div className="mt-2 ml-4">
+                                                {Object.entries(meals.dinner).map(([subcategory, subMeals]) => (
+                                                    <div key={subcategory} className="mb-3">
+                                                        <button
+                                                            onClick={() => toggleCategory(subcategory)}
+                                                            className="w-full flex items-center justify-between p-2 bg-gray-100 rounded-lg hover:bg-gray-200"
+                                                        >
+                                                            <span className="text-sm font-medium capitalize">
+                                                                {subcategory} ({subMeals.length})
+                                                            </span>
+                                                            {expandedCategories[subcategory] ? <ChevronDown /> : <ChevronRight />}
+                                                        </button>
+                                                        
+                                                        {expandedCategories[subcategory] && (
+                                                            <div className="mt-2">
+                                                                {subMeals.map(meal => (
+                                                                    <MealItem
+                                                                        key={meal.id}
+                                                                        meal={meal}
+                                                                        mealType="dinner"
+                                                                        onEdit={(meal) => setEditingMeal({ meal, mealType: 'dinner', subcategory })}
+                                                                    />
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Calendar */}
+                            <div className="bg-white rounded-xl shadow-sm mobile-panel-spacing">
+                                <div className="p-4 border-b border-gray-200">
+                                    <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                                        <span>📅</span>
+                                        {view === 'weekly' ? 'Weekly' : 'Monthly'} Meal Plan
+                                    </h2>
+                                </div>
+                                
+                                <div className="scrollable-panel p-4">
+                                    {view === 'weekly' ? (
+                                        // Weekly View
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+                                            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, index) => (
+                                                <div key={index} className="border-2 border-gray-200 rounded-lg p-3">
+                                                    <div className="font-medium text-center mb-2 text-gray-700">{day}</div>
+                                                    <div className="space-y-2">
+                                                        <CalendarSlot day={index + 1} mealType="breakfast" meal={calendar[`${index + 1}-breakfast`]} />
+                                                        <CalendarSlot day={index + 1} mealType="lunch" meal={calendar[`${index + 1}-lunch`]} />
+                                                        <CalendarSlot day={index + 1} mealType="dinner" meal={calendar[`${index + 1}-dinner`]} />
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        // Monthly View
+                                        <div className="space-y-4">
+                                            <div className="grid grid-cols-7 gap-2 text-center text-xs font-medium text-gray-600">
+                                                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                                                    <div key={day}>{day}</div>
+                                                ))}
+                                            </div>
+                                            
+                                            <div className="grid grid-cols-7 gap-2">
+                                                {[...Array(28)].map((_, i) => (
+                                                    <div key={i} className="border-2 border-gray-200 rounded-lg p-2 min-h-[120px]">
+                                                        <div className="text-xs font-medium text-gray-500 mb-1">{i + 1}</div>
+                                                        <div className="space-y-1">
+                                                            <CalendarSlot day={i + 1} mealType="breakfast" meal={calendar[`${i + 1}-breakfast`]} />
+                                                            <CalendarSlot day={i + 1} mealType="lunch" meal={calendar[`${i + 1}-lunch`]} />
+                                                            <CalendarSlot day={i + 1} mealType="dinner" meal={calendar[`${i + 1}-dinner`]} />
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Right Panel - Grocery List / Prep Tasks */}
+                            <div className="space-y-4">
+                                {/* Grocery List */}
+                                <div className="bg-white rounded-xl shadow-sm">
+                                    <div className="p-4 border-b border-gray-200">
+                                        <div className="flex justify-between items-center">
+                                            <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                                                <span>🛒</span>
+                                                Grocery List
+                                            </h2>
+                                            <button
+                                                onClick={exportGroceryList}
+                                                className="flex items-center gap-1 px-3 py-1 bg-purple-500 text-white rounded-lg hover:bg-purple-600"
+                                            >
+                                                <ExportIcon />
+                                                Export
+                                            </button>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="scrollable-panel p-4" style={{ maxHeight: '40vh' }}>
+                                        <div className="space-y-3">
+                                            {Object.entries(generateGroceryList()).length === 0 ? (
+                                                <p className="text-gray-500 text-center py-8">Add meals to generate grocery list</p>
+                                            ) : (
+                                                Object.entries(generateGroceryList()).map(([category, items]) => (
+                                                    <div key={category}>
+                                                        <h3 className="font-medium text-purple-600 mb-1">{category}</h3>
+                                                        <div className="space-y-1">
+                                                            {items.map((item, index) => (
+                                                                <div key={index} className="flex justify-between text-sm">
+                                                                    <span>{item.item}</span>
+                                                                    <span className="text-gray-500">
+                                                                        {item.amount % 1 === 0 ? item.amount : item.amount.toFixed(1)} {item.unit}
+                                                                    </span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ))
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Prep Tasks */}
+                                <div className="bg-white rounded-xl shadow-sm">
+                                    <div className="p-4 border-b border-gray-200">
+                                        <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                                            <span>⏰</span>
+                                            Prep Ahead
+                                        </h2>
+                                    </div>
+                                    
+                                    <div className="scrollable-panel p-4" style={{ maxHeight: '40vh' }}>
+                                        <div className="space-y-2">
+                                            {getPrepTasks().length === 0 ? (
+                                                <p className="text-gray-500 text-center py-8">No prep tasks available</p>
+                                            ) : (
+                                                getPrepTasks().map((task, index) => (
+                                                    <div key={index} className="bg-gray-50 rounded p-2">
+                                                        <div className="text-sm font-medium">Day {task.day} - {task.meal}</div>
+                                                        <div className="text-xs text-gray-600">• {task.task}</div>
+                                                    </div>
+                                                ))
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Edit Meal Modal */}
+                        {editingMeal && (
+                            <EditMealModal
+                                meal={editingMeal.meal}
+                                mealType={editingMeal.mealType}
+                                onSave={(updatedMeal) => updateMeal(updatedMeal, editingMeal.mealType, editingMeal.subcategory)}
+                                onClose={() => setEditingMeal(null)}
+                            />
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        // Render the app
+        ReactDOM.render(<MealPlanner />, document.getElementById('root'));
+    </script>
+</body>
+</html>
